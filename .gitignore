@@ -5,11 +5,11 @@ yarn.lock
 pnpm-lock.yaml
 
 # Dapp Build
-dao/.next/
-dao/out/
-dao/build/
-dao/dist/
-dao/node_modules/
+dao-web/.next/
+dao-web/out/
+dao-web/build/
+dao-web/dist/
+dao-web/node_modules/
 
 # Foundry/Ethereum
 dao-contracts/out/
