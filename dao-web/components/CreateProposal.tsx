@@ -39,7 +39,7 @@ export default function CreateProposal() {
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
             placeholder="0x..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black placeholder:text-gray-400 bg-white"
             required
           />
         </div>
@@ -55,7 +55,7 @@ export default function CreateProposal() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.1"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black placeholder:text-gray-400 bg-white"
             required
           />
         </div>
@@ -69,7 +69,7 @@ export default function CreateProposal() {
             min="1"
             value={durationDays}
             onChange={(e) => setDurationDays(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black placeholder:text-gray-400 bg-white"
             required
           />
         </div>
