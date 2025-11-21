@@ -58,8 +58,27 @@ export function useDAO() {
   const fetchUserBalance = useCallback(async () => {
     if (!daoContract || !address) return;
     try {
-      const balance = await daoContract.getUserBalance(address);
-      setUserBalance(formatEther(balance));
+      // Chain verification (optional, warns if mismatch)
+      const network = await daoContract.runner?.provider?.getNetwork().catch(() => undefined);
+      if (network && network.chainId !== BigInt(CHAIN_ID)) {
+        console.warn(`Chain mismatch: expected ${CHAIN_ID} got ${network.chainId}. Skipping user balance fetch.`);
+        return;
+      }
+      // Prefer explicit getter; fallback to public mapping accessor balances(address)
+      let raw: bigint;
+      const getUserBalanceFn = (daoContract as unknown as { getUserBalance?: (addr: string) => Promise<bigint> }).getUserBalance;
+      if (typeof getUserBalanceFn === 'function') {
+        raw = await getUserBalanceFn(address);
+      } else {
+        const balancesFn = (daoContract as unknown as { balances?: (addr: string) => Promise<bigint> }).balances;
+        if (typeof balancesFn === 'function') {
+          raw = await balancesFn(address);
+        } else {
+          console.warn('No method to read user balance (getUserBalance / balances) found on DAO contract');
+          return;
+        }
+      }
+      setUserBalance(formatEther(raw));
     } catch (error) {
       console.error('Error fetching user balance:', error);
     }
@@ -69,7 +88,26 @@ export function useDAO() {
   const fetchTotalDeposited = useCallback(async () => {
     if (!daoContract) return;
     try {
-      const total = await daoContract.getTotalDeposited();
+      // Validate chain matches expected
+      const network = await daoContract.runner?.provider?.getNetwork().catch(() => undefined);
+      if (network && network.chainId !== BigInt(CHAIN_ID)) {
+        console.warn(`Chain mismatch: expected ${CHAIN_ID} got ${network.chainId}. Skipping totalDeposited fetch.`);
+        return;
+      }
+      // Prefer explicit getter, fallback to public variable accessor
+      let total: bigint;
+      const getter = (daoContract as unknown as { getTotalDeposited?: () => Promise<bigint> }).getTotalDeposited;
+      if (typeof getter === 'function') {
+        total = await getter();
+      } else {
+        const publicVar = (daoContract as unknown as { totalDeposited?: () => Promise<bigint> }).totalDeposited;
+        if (typeof publicVar === 'function') {
+          total = await publicVar();
+        } else {
+          console.warn('No method to read totalDeposited found');
+          return;
+        }
+      }
       setTotalDeposited(formatEther(total));
     } catch (error) {
       console.error('Error fetching total deposited:', error);
@@ -79,9 +117,24 @@ export function useDAO() {
   // Fetch proposal count
   const fetchProposalCount = useCallback(async () => {
     if (!daoContract) return;
+    // Defensive: ensure function exists in ABI
+    // Access dynamically, ethers Contract typing is reflective
+    const fn = (daoContract as unknown as { proposalCount?: () => Promise<bigint> }).proposalCount;
+    if (typeof fn !== 'function') {
+      console.warn('proposalCount() not found on contract instance');
+      return;
+    }
     try {
-      const count = await daoContract.proposalCount();
-      setProposalCount(Number(count));
+      // Optional: verify network before calling
+      const network = await daoContract.runner?.provider?.getNetwork().catch(() => undefined);
+      if (network && network.chainId !== BigInt(CHAIN_ID)) {
+        console.warn(`Chain mismatch: expected ${CHAIN_ID} got ${network.chainId}. Skipping proposalCount fetch.`);
+        return;
+      }
+      const count: bigint = await fn();
+      // Avoid unsafe Number conversion for very large counts
+      const numeric = count > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(count);
+      setProposalCount(numeric);
     } catch (error) {
       console.error('Error fetching proposal count:', error);
     }
