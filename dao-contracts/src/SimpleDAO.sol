@@ -30,14 +30,14 @@ contract DAOVoting is ERC2771Context {
 
     uint256 public proposalCount;
     uint256 public minimumBalance;
-    uint256 public totalDeposited; // Balance total depositado por todos los usuarios
+    uint256 public totalDeposited; // Total balance deposited by all users
     uint256 public constant PROPOSAL_CREATION_THRESHOLD = 10; // 10% of contract balance
     uint256 public constant EXECUTION_DELAY = 1 days;
 
     mapping(uint256 => Proposal) public proposals;
     mapping(uint256 => mapping(address => VoteType)) public votes;
     mapping(uint256 => mapping(address => bool)) public hasVoted;
-    mapping(address => uint256) public balances; // Balance de cada usuario en el DAO
+    mapping(address => uint256) public balances; // Balance of each user in the DAO
 
     event ProposalCreated(
         uint256 indexed proposalId,

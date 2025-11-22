@@ -12,9 +12,9 @@ interface WalletContextType {
   chainId: number | null;
   connect: () => Promise<void>;
   disconnect: () => void;
-  reconnect: () => Promise<void>; // nuevo
-  refreshAccounts: () => Promise<void>; // opcional
-  ensureNetwork: () => Promise<boolean>; // fuerza cambiar/red agregar
+  reconnect: () => Promise<void>; // reconnect with permissions
+  refreshAccounts: () => Promise<void>; // optional
+  ensureNetwork: () => Promise<boolean>; // force chain switch/add
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -34,13 +34,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const TARGET_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337); // 31337 anvil/hardhat
   const TARGET_CHAIN_ID_HEX = '0x' + TARGET_CHAIN_ID.toString(16);
 
-  // Intenta cambiar a la red correcta; si no existe la agrega.
+  // Try to switch to the correct network; if it doesn't exist, add it.
   const ensureNetwork = useCallback(async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !window.ethereum) return false;
     try {
       const currentChainHex = await window.ethereum.request({ method: 'eth_chainId' }) as string;
       if (parseInt(currentChainHex, 16) === TARGET_CHAIN_ID) return true;
-      // Intentar switch primero
+      // Try switching first
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
@@ -48,7 +48,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
         return true;
       } catch (switchErr: unknown) {
-        // 4902 = chain no añadida
+        // 4902 = chain not added
         if ((switchErr as { code?: number }).code === 4902) {
           try {
             await window.ethereum.request({
@@ -100,14 +100,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     try {
       setIsConnecting(true);
-      // Forzar red correcta antes de pedir cuentas (si falla, igual pedimos cuentas para mostrar mismatch)
+      // Force correct network before requesting accounts (if it fails, we still request to show mismatch)
       await ensureNetwork();
       const accounts = await browserProvider.send('eth_requestAccounts', []);
       await applyConnection(browserProvider, accounts);
-      // Revalidar red tras conexión (por si usuario rechazó switch inicial y acepta después)
+      // Revalidate network after connection (in case user rejected initial switch and accepts later)
       const net = await browserProvider.getNetwork();
       if (Number(net.chainId) !== TARGET_CHAIN_ID) {
-        console.warn(`Conectado a chainId ${net.chainId} pero se esperaba ${TARGET_CHAIN_ID}. Algunas lecturas pueden ignorarse.`);
+        console.warn(`Connected to chainId ${net.chainId} but expected ${TARGET_CHAIN_ID}. Some reads may be ignored.`);
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error);
@@ -121,7 +121,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!browserProvider) return;
     try {
       setIsConnecting(true);
-      // Re-pedir permisos (puede no mostrar modal si ya dado).
+      // Re-request permissions (may not show modal if already granted).
       await window.ethereum?.request({
         method: 'wallet_requestPermissions',
         params: [{ eth_accounts: {} }],
@@ -156,7 +156,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setChainId(null);
   };
 
-  // Auto-conexión inicial (solo una vez)
+  // Initial auto-connection (only once)
   useEffect(() => {
     if (typeof window === 'undefined' || !window.ethereum) return;
 
@@ -171,7 +171,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const handleChainChanged = (chainIdHex: string) => {
       const newChainId = parseInt(chainIdHex, 16);
       setChainId(newChainId);
-      // Evitar reload completo; si necesitas resetear caches hazlo aquí.
+      // Avoid full reload; if you need to reset caches do it here.
     };
 
     window.ethereum.on('accountsChanged', handleAccountsChanged);
@@ -188,14 +188,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const browserProvider = initProvider();
       if (!browserProvider) return;
       try {
-        // Intentar forzar red silenciosamente; si falla no bloquea autoconnect
+        // Try forcing network silently; if it fails it doesn't block autoconnect
         await ensureNetwork();
         const accounts = await browserProvider.send('eth_accounts', []);
         if (accounts.length > 0) {
           await applyConnection(browserProvider, accounts);
           const net = await browserProvider.getNetwork();
           if (Number(net.chainId) !== TARGET_CHAIN_ID) {
-            console.warn(`AutoConnect: chainId ${net.chainId} diferente a esperado ${TARGET_CHAIN_ID}`);
+            console.warn(`AutoConnect: chainId ${net.chainId} different from expected ${TARGET_CHAIN_ID}`);
           }
         }
       } catch (error) {
