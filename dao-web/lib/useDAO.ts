@@ -38,6 +38,7 @@ export function useDAO() {
   const [proposalCount, setProposalCount] = useState(0);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
+  const [walletEthBalance, setWalletEthBalance] = useState('0');
 
   // Initialize contracts
   useEffect(() => {
@@ -113,6 +114,17 @@ export function useDAO() {
       console.error('Error fetching total deposited:', error);
     }
   }, [daoContract]);
+
+  // Fetch native wallet balance
+  const fetchWalletBalance = useCallback(async () => {
+    if (!provider || !address) return;
+    try {
+      const bal = await provider.getBalance(address);
+      setWalletEthBalance(formatEther(bal));
+    } catch (e) {
+      console.error('Error fetching wallet balance:', e);
+    }
+  }, [provider, address]);
 
   // Fetch proposal count
   const fetchProposalCount = useCallback(async () => {
@@ -246,13 +258,19 @@ export function useDAO() {
         data: voteData,
       };
       
-      // Create EIP-712 typed data
+      // Resolve chainId directly from provider to avoid mismatch with env
+      const network = await forwarderContract.runner?.provider?.getNetwork();
+      const derivedChainId = network ? Number(network.chainId) : CHAIN_ID;
+      if (derivedChainId !== CHAIN_ID) {
+        console.warn(`Gasless vote: using network chainId ${derivedChainId} instead of env ${CHAIN_ID}`);
+      }
+      // Create EIP-712 typed data domain matching forwarder contract deployment
       const domain = {
         name: 'MinimalForwarder',
         version: '1',
-        chainId: CHAIN_ID,
+        chainId: derivedChainId,
         verifyingContract: FORWARDER_ADDRESS,
-      };
+      } as const;
       
       const types = {
         ForwardRequest: [
@@ -267,6 +285,15 @@ export function useDAO() {
       
       // Sign the request
       const signature = await signer.signTypedData(domain, types, forwardRequest);
+      // Optional local verification to catch issues early
+      try {
+        const localValid = await forwarderContract.verify(forwardRequest, signature);
+        if (!localValid) {
+          console.warn('Local forwarder.verify returned false before relay submission');
+        }
+      } catch (verifyErr) {
+        console.warn('Local verification threw error', verifyErr);
+      }
       
       // Send to relayer
       const response = await fetch('/api/relay', {
@@ -277,7 +304,7 @@ export function useDAO() {
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to execute gasless vote');
+        throw new Error(`${error.error || 'Failed gasless vote'}${error.details ? ': ' + error.details : ''}`);
       }
       
       const result = await response.json();
@@ -339,7 +366,7 @@ export function useDAO() {
       fetchTotalDeposited();
       fetchProposalCount();
     }
-  }, [daoContract, isConnected, fetchUserBalance, fetchTotalDeposited, fetchProposalCount]);
+  }, [daoContract, isConnected, fetchUserBalance, fetchTotalDeposited, fetchProposalCount, fetchWalletBalance]);
 
   // Fetch proposals when count changes
   useEffect(() => {
@@ -355,17 +382,80 @@ export function useDAO() {
         fetchUserBalance();
         fetchTotalDeposited();
         fetchProposalCount();
+        fetchWalletBalance();
       }
     }, 10000); // Every 10 seconds
 
     return () => clearInterval(interval);
   }, [daoContract, isConnected, fetchUserBalance, fetchTotalDeposited, fetchProposalCount]);
 
+  // Listen to new blocks for near real-time updates (throttled)
+  useEffect(() => {
+    if (!provider || !isConnected) return;
+    let lastUpdate = 0;
+    const handler = async () => {
+      const now = Date.now();
+      if (now - lastUpdate < 5000) return; // throttle 5s
+      lastUpdate = now;
+      await fetchWalletBalance();
+    };
+    provider.on('block', handler);
+    return () => {
+      provider.off('block', handler);
+    };
+  }, [provider, isConnected, fetchWalletBalance]);
+
+  // Contract event listeners for instant refresh
+  useEffect(() => {
+    if (!daoContract || !isConnected) return;
+
+  const onFundsDeposited = async (from: string) => {
+      if (address && from.toLowerCase() === address.toLowerCase()) {
+        await fetchUserBalance();
+      }
+      await fetchTotalDeposited();
+    };
+
+  const onProposalCreated = async () => {
+      await fetchProposalCount();
+      await fetchProposals();
+    };
+
+  const onVoted = async () => {
+      await fetchProposals();
+    };
+
+  const onProposalExecuted = async () => {
+      await fetchProposals();
+      await fetchTotalDeposited();
+    };
+
+    // Attach listeners (event names must match contract events; adjust if different)
+    try {
+      daoContract.on('FundsDeposited', onFundsDeposited);
+      daoContract.on('ProposalCreated', onProposalCreated);
+      daoContract.on('Voted', onVoted);
+      daoContract.on('ProposalExecuted', onProposalExecuted);
+    } catch (e) {
+      console.warn('Failed attaching DAO event listeners (check event names).', e);
+    }
+
+    return () => {
+      try {
+        daoContract.off('FundsDeposited', onFundsDeposited);
+        daoContract.off('ProposalCreated', onProposalCreated);
+        daoContract.off('Voted', onVoted);
+        daoContract.off('ProposalExecuted', onProposalExecuted);
+      } catch {}
+    };
+  }, [daoContract, isConnected, address, fetchUserBalance, fetchTotalDeposited, fetchProposalCount, fetchProposals]);
+
   return {
     userBalance,
     totalDeposited,
     proposalCount,
     proposals,
+    walletEthBalance,
     loading,
     fundDAO,
     createProposal,

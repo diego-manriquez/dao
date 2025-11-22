@@ -1,16 +1,25 @@
 'use client';
 
-import { useDAO, type Proposal, VoteType } from '@/lib/useDAO';
-import { useState } from 'react';
+import { type Proposal, VoteType } from '@/lib/useDAO';
+import { useState, useEffect } from 'react';
 
 interface ProposalCardProps {
   proposal: Proposal;
+  vote: (proposalId: number, voteType: VoteType) => Promise<string> | Promise<void>;
+  voteGasless: (proposalId: number, voteType: VoteType) => Promise<string> | Promise<void>;
+  executeProposal: (proposalId: number) => Promise<string> | Promise<void>;
+  loading: boolean;
 }
 
-export default function ProposalCard({ proposal }: ProposalCardProps) {
-  const { vote, voteGasless, executeProposal, loading } = useDAO();
+export default function ProposalCard({ proposal, vote, voteGasless, executeProposal, loading }: ProposalCardProps) {
   const [useGasless, setUseGasless] = useState(false);
-  const [now] = useState(() => Math.floor(Date.now() / 1000));
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  // Update 'now' every 15s so status badges refresh
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleVote = async (support: boolean) => {
     const voteType = support ? VoteType.FOR : VoteType.AGAINST;

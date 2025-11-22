@@ -4,7 +4,7 @@ import { useDAO } from '@/lib/useDAO';
 import ProposalCard from './ProposalCard';
 
 export default function ProposalList() {
-  const { proposals, proposalCount, loading, refetch } = useDAO();
+  const { proposals, proposalCount, loading, refetch, vote, voteGasless, executeProposal } = useDAO();
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
@@ -29,7 +29,14 @@ export default function ProposalList() {
       ) : (
         <div className="space-y-4">
           {proposals.map((proposal) => (
-            <ProposalCard key={proposal.id} proposal={proposal} />
+            <ProposalCard
+              key={proposal.id}
+              proposal={proposal}
+              vote={vote}
+              voteGasless={voteGasless}
+              executeProposal={executeProposal}
+              loading={loading}
+            />
           ))}
         </div>
       )}
